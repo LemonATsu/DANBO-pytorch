@@ -5,6 +5,12 @@
 >[Shih-Yang Su](https://lemonatsu.github.io/), [Timur Bagautdinov](https://scholar.google.ch/citations?user=oLi7xJ0AAAAJ&hl=en), and [Helge Rhodin](http://helge.rhodin.de/)\
 >ECCV 2022
 
+DANBO is a follow-up work of our [A-NeRF](https://github.com/LemonATsu/A-NeRF) in NeurIPS 2021.
+DANBO enables learning a more generalizable 3D body model with better data efficiency.
+
+The repo supports both DANBO and A-NeRF training, allowing for easy comparisons to our methods.
+
+
 ## Work in progress
 We are currently cleaning the code, so you may encounter runtime errors when running this repo.
 
