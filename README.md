@@ -75,7 +75,7 @@ This will finetune the learned Mixamo Archer for 200k with the already refined p
 
 ## Citation
 ```
-@inproceedings{su202,
+@inproceedings{su2022danbo,
     title={DANBO: Disentangled Articulated Neural Body Representations via Graph Neural Networks},
     author={Su, Shih-Yang and Bagautdinov, Timur and Rhodin, Helge},
     booktitle={European Conference on Computer Vision},
