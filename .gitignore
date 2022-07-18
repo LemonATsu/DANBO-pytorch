@@ -10,3 +10,6 @@ data/
 # logs
 log*/
 render_output*/
+# helper script
+*.sh
+
