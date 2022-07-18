@@ -8,6 +8,7 @@
 ## Work in progress
 We are currently cleaning the code, so you may encounter runtime errors when running this repo.
 
+<!--
 ## Testing
 You can use [`run_render.py`](run_render.py) to render the learned models under different camera motions, or retarget the character to different poses by
 ```
@@ -70,6 +71,7 @@ python run_nerf.py --config configs/mixamo/mixamo_finetune.txt --finetune --ft_p
 ```
 This will finetune the learned Mixamo Archer for 200k with the already refined poses. Note that the pose will not be updated during this time.
 
+-->
 
 ## Citation
 ```
@@ -89,6 +91,6 @@ This will finetune the learned Mixamo Archer for 200k with the already refined p
 }
 ```
 ## Acknowledgements
-- The code is built upon [nerf-pytorch](https://github.com/yenchenlin/nerf-pytorch).
+- The code is built upon [A-NeRF](https://github.com/LemonATsu/A-NeRF).
 - We use [SPIN](https://github.com/nkolot/SPIN) for estimating the initial 3D poses for our Mixamo dataset.
 - We generate the data using [SURREAL](https://github.com/gulvarol/surreal) and [Adobe Mixamo](https://www.mixamo.com/) characters.
