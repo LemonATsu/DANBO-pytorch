@@ -92,5 +92,7 @@ This will finetune the learned Mixamo Archer for 200k with the already refined p
 ```
 ## Acknowledgements
 - The code is built upon [A-NeRF](https://github.com/LemonATsu/A-NeRF).
+<!--
 - We use [SPIN](https://github.com/nkolot/SPIN) for estimating the initial 3D poses for our Mixamo dataset.
 - We generate the data using [SURREAL](https://github.com/gulvarol/surreal) and [Adobe Mixamo](https://www.mixamo.com/) characters.
+-->
