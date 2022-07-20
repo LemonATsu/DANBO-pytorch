@@ -11,7 +11,7 @@ DANBO enables learning a more generalizable 3D body model with better data effic
 The repo supports both DANBO and A-NeRF training, allowing for easy comparisons to our methods.
 
 
-## Work in progress
+## Cleaning in progress
 We are currently cleaning the code, so you may encounter runtime errors when running this repo.
 
 <!--
