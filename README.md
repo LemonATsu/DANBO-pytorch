@@ -13,6 +13,7 @@ The repo supports both DANBO and A-NeRF training, allowing for easy comparisons 
 
 ## Cleaning in progress
 We are currently cleaning the code, so you may encounter runtime errors when running this repo.
+
 (Update Aug 2): Add environment setup and training instruction. 
 
 <!--
