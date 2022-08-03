@@ -9,7 +9,7 @@ from .load_h36m import H36MDataset
 from .load_mixamo import MixamoDataset
 from .load_perfcap import MonoPerfCapDataset
 from .load_zju import ZJUMocapDataset, ZJUH36MDataset
-from .load_aist import AISTDataset
+# from .load_aist import AISTDataset # disabled for now
 from .load_neural_actor import NeuralActorDataset
 from .utils.skeleton_utils import rotate_y, rotate_x, rotate_z
 from .utils.skeleton_utils import SMPLSkeleton, Mpi3dhpSkeleton, CanonicalSkeleton

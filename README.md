@@ -13,6 +13,7 @@ The repo supports both DANBO and A-NeRF training, allowing for easy comparisons 
 
 ## Cleaning in progress
 We are currently cleaning the code, so you may encounter runtime errors when running this repo.
+(Update Aug 2): Add environment setup and training instruction. 
 
 <!--
 ## Testing
@@ -50,34 +51,40 @@ which will output the rendered images in `render_output/surreal_mesh/mesh_render
 ![](imgs/mesh_render.gif)
 
 You can change the setting in [`run_render.py`](run_render.py) to create your own rendering configuration.
+-->
+## Setup
 
+### Setup environment
+```
+conda create -n danbo python=3.8
+conda activate danbo
+
+# install pytorch for your corresponding CUDA environments
+pip install torch
+
+# install pytorch3d: note that doing `pip install pytorch3d` directly may install an older version with bugs.
+# be sure that you specify the version that matches your CUDA environment. See: https://github.com/facebookresearch/pytorch3d
+pip install pytorch3d -f https://dl.fbaipublicfiles.com/pytorch3d/packaging/wheels/py38_cu102_pyt190/download.html
+
+# install other dependencies
+pip install -r requirements.txt
+
+```
 
 ## Training
 We provide template training configurations in `configs/` for different settings. 
 
-To train A-NeRF on our pre-processed SURREAL dataset,
+To train DANBO on the H36M dataset 
 ```
-python run_nerf.py --config configs/surreal/surreal.txt --basedir logs  --expname surreal_model
+python run_nerf.py --config configs/h36m_zju/danbo_base.txt --basedir logs  --expname danbo_h36m
 ```
-The trained weights and log can be found in ```logs/surreal_model```.
+The trained weights and log can be found in ```logs/danbo_h36m```.
 
-To train A-NeRF on our pre-processed Mixamo dataset with estimated poses, run
+You can also train A-NeRF without pose refinement via
 ```
-python run_nerf.py --config configs/mixamo/mixamo.txt --basedir log_mixamo/ --num_workers 8 --subject archer --expname mixamo_archer
+python run_nerf.py --config configs/h36m_zju/anerf_base --basedir logs_anerf --num_workers 8 --subject S6 --expname anerf_S6
 ```
-This will train A-NeRF on Mixamo Archer with pose refinement for 500k iterations, with 8 worker threads for the dataloader. 
-
-You can also add `--use_temp_loss --temp_coef 0.05` to optimize the pose with temporal constraint. 
-
-Additionally, you can specify `--opt_pose_stop 200000` to stop the pose refinement at 200k iteraions to only optimize the body models for the remaining iterations.
-
-To finetune the learned model, run
-```
-python run_nerf.py --config configs/mixamo/mixamo_finetune.txt --finetune --ft_path log_mixamo/mixamo_archer/500000.tar --expname mixamo_archer_finetune
-```
-This will finetune the learned Mixamo Archer for 200k with the already refined poses. Note that the pose will not be updated during this time.
-
--->
+This will train A-NeRF on H36M subject S6 with with 8 worker threads for the dataloader. 
 
 ## Citation
 ```
