@@ -160,6 +160,7 @@ def create_raycaster(args, data_attrs, device=None):
         caster_class = RayCaster
     elif caster_class.startswith('graph'):
         caster_class = GraphCaster
+        caster_class_kwargs['use_volume_near_far'] = args.use_volume_near_far
     else:
         raise NotImplementedError(f'caster class {caster_class} is not implemented.')
     ray_caster = caster_class(model,
@@ -413,7 +414,8 @@ class RayCaster(nn.Module):
         near, far = bounds[...,0], bounds[...,1] # [-1,1]
 
         # Step 2: Sample 'coarse' sample from the ray segment within the bounding cylinder
-        near, far =  get_near_far_in_cylinder(rays_o, rays_d, cyls, near=near, far=far)
+        #near, far =  get_near_far_in_cylinder(rays_o, rays_d, cyls, near=near, far=far)
+        near, far = self.get_near_far(rays_o, rays_d, cyls, near=near, far=far, skts=skts)
         pts, z_vals = self.sample_pts(rays_o, rays_d, near, far, N_rays, N_samples,
                                       perturb, lindisp, pytest=pytest, ray_noise_std=ray_noise_std)
 
@@ -520,20 +522,9 @@ class RayCaster(nn.Module):
 
         return inputs
     
-    """
-    def run_network(self, nerf_inputs, network, netchunk=1024*96):
-        N_rays, N_samples = nerf_inputs['pts'].shape[:2] 
-        batchchunk = netchunk // N_samples
-        a1 = self.get_batch_chunk(nerf_inputs, start=0, chunk=batchchunk)
-        a2 = self.get_batch_chunk(nerf_inputs, start=batchchunk, chunk=batchchunk)
-        import pdb; pdb.set_trace()
-        print
 
-    
-    def get_batch_chunk(self, batch, start=0, chunk=1024):
-        return {k: batch[k][start:start+chunk] if torch.is_tensor(batch[k]) else batch[k]
-                for k in batch}
-    """
+    def get_near_far(self, rays_o, rays_d, cyls, near=0., far=100., **kwargs):
+        return get_near_far_in_cylinder(rays_o, rays_d, cyls, near=near, far=far)
         
     @torch.no_grad()
     def render_mesh_density(self, kps, skts, bones, subject_idxs=None, radius=1.0, res=64,
@@ -674,7 +665,9 @@ class RayCaster(nn.Module):
         for i, parent in enumerate(joint_trees):
             children[parent].append(i)
         
-        transforms = torch.eye(4).reshape(1, 1, 4, 4).repeat(len(self.rest_poses), len(joint_trees), 1, 1)
+        N_rest_poses = len(self.rest_poses) if len(self.rest_poses.shape) == 3 else 1
+        
+        transforms = torch.eye(4).reshape(1, 1, 4, 4).repeat(N_rest_poses, len(joint_trees), 1, 1)
         child_idxs = []
         for parent_idx, c in enumerate(children):
             # has no child or has multiple child:
@@ -755,6 +748,71 @@ class RayCaster(nn.Module):
         return self.network, self.network_fine
 
 class GraphCaster(RayCaster):
+
+    def __init__(self, *args, use_volume_near_far=False, **kwargs):
+        super(GraphCaster, self).__init__(*args, **kwargs)
+        self.use_volume_near_far = use_volume_near_far
+    
+    @torch.no_grad()
+    def get_near_far(self, rays_o, rays_d, cyls, near=0., far=100., skts=None):
+
+        near, far = get_near_far_in_cylinder(rays_o, rays_d, cyls, near=near, far=far)
+        if not self.use_volume_near_far:
+            return near, far
+        
+        assert skts is not None
+        assert self.align_bones is not None, 'volume_near_far only works when self.align_bones="align"'
+        B, J = skts.shape[:2]
+
+        # transform both rays origin and direction to the per-joint coordinate
+        rays_ot = (skts[..., :3, :3] @ rays_o.reshape(B, 1, 3, 1) + skts[..., :3, -1:]).reshape(B, J, 3)
+        rays_dt = (skts[..., :3, :3] @ rays_d.reshape(B, 1, 3, 1)).reshape(B, J, 3)
+
+        if self.align_bones is not None:
+            align_transforms = self.transforms[:1].to(rays_o.device)
+            rays_ot = ((align_transforms[..., :3, :3] @ rays_ot[..., None]) + \
+                        align_transforms[..., :3, -1:]).reshape(B, J, 3)
+            rays_dt = (align_transforms[..., :3, :3] @ rays_dt[..., None]).reshape(B, J, 3)
+        
+        # scale the rays by the learned volume scale and find the intersections with the volumes
+        axis_scale = self.network.graph_net.get_axis_scale().reshape(1, J, 3).abs()
+        p_valid, v_valid, p_intervals = get_ray_box_intersections(
+                                            rays_ot / axis_scale, 
+                                            rays_dt / axis_scale, 
+                                            bound_range=1.1, # intentionally makes the bound a bit larger
+                                        )
+        # now undo the scale so we can calculate the near far in the original space
+        axis_scale = axis_scale.expand(B, J, 3)
+        p_intervals = p_intervals * axis_scale[v_valid][..., None, :]
+
+        norm_rays = rays_dt[v_valid].norm(dim=-1)
+        # find the step size (near / far)
+        # t * norm_ray + ray_o = p -> t =  (p - ray_o) / norm_rays
+        # -> distance is the norm 
+        steps = (p_intervals - rays_ot[v_valid][..., None, :]).norm(dim=-1) / norm_rays[..., None]
+
+        # extract near/far for each volume
+        v_near = 100000 * torch.ones(B, J)
+        v_far = -100000 * torch.ones(B, J)
+
+        # find the near/far
+        v_near[v_valid] = steps.min(dim=-1).values
+        v_far[v_valid] = steps.max(dim=-1).values
+
+        # pick the closest/farthest points as the near/far planes
+        v_near = v_near.min(dim=-1).values
+        v_far = v_far.max(dim=-1).values
+
+        # merge the values back to the cylinder near far
+        ray_valid = (v_valid.sum(-1) > 0)
+        new_near = near.clone()
+        new_far = far.clone()
+
+        new_near[ray_valid, 0] = v_near[ray_valid]
+        new_far[ray_valid, 0] = v_far[ray_valid]
+
+        return new_near, new_far
+
 
     def _collect_outputs(self, ret, ret0=None, encoded=None, encoded0=None):
         collected = super(GraphCaster, self)._collect_outputs(ret, ret0, encoded)

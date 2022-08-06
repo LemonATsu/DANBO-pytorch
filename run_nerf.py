@@ -380,7 +380,7 @@ def config_parser():
     parser.add_argument("--vol_scale_penalty", type=float, default=0.01,
                         help='coefficient for regualarizing the volume from getting too big')
 
-    # GraphNeRF
+    # DANBO
     parser.add_argument("--multires_graph", type=int, default=5,
                         help='multires for graph input')
     parser.add_argument("--multires_voxel", type=int, default=5,
@@ -391,12 +391,6 @@ def config_parser():
                         help='feature size of the predicted voxel')
     parser.add_argument("--align_corners", action='store_true',
                         help='put the predicted voxel values on corners')
-    parser.add_argument("--dist_loss", action='store_true',
-                        help='use distance as supervision to train predictor')
-    parser.add_argument("--dist_loss_coef", type=float, default=1e-3,
-                        help='coefficent to the distance loss')
-    parser.add_argument("--dist_loss_beta", type=float, default=0.5,
-                        help='to control the sharpness of target distribution')
     parser.add_argument("--graph_input_type", type=str, default='quat',
                         help='type of encoding to use for graph input')
     parser.add_argument("--agg_backbone", type=str, default='mlp',
@@ -413,6 +407,8 @@ def config_parser():
                         help='mask out root but still keep volume prediction there')
     parser.add_argument("--mask_vol_prob", action='store_true',
                         help='mask out the selection probability for out-of-bound samples')
+    parser.add_argument("--use_volume_near_far", action='store_true',
+                        help='use learned body volume for sampling on rays')
 
     # per-frame code optimization options
     parser.add_argument("--opt_framecode", action='store_true',

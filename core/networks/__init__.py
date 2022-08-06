@@ -1,5 +1,5 @@
 from .nerf import *
-from .gnerf import *
+from .danbo import *
 from .embedding import *
 
 from .misc import *
@@ -13,14 +13,8 @@ def create_nerf(args, shared_nerf_kwargs, data_attrs):
 
     if args.nerf_type in ['nerf']:
         nerf_class = NeRF # default
-    elif args.nerf_type in ['graph']:
-        nerf_class = GraphNeRF
-        caster_class = 'graph'
-    elif args.nerf_type in ['graphpart']:
-        nerf_class = GraphPartNeRF
-        caster_class = 'graph'
-    elif args.nerf_type in ['graphrot']:
-        nerf_class = GraphRotateNeRF
+    elif args.nerf_type in ['graph', 'danbo']:
+        nerf_class = DANBO
         caster_class = 'graph'
     else:
         raise NotImplementedError(f'nerf class {args.nerf_type} is not implemented.')
