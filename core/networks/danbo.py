@@ -339,7 +339,7 @@ class DANBO(NeRF):
         return  density_inputs, encoded
 
     def collect_encoded(self, encoded_pts, encoded_views):
-        ret = super(GraphNeRF, self).collect_encoded(encoded_pts, encoded_views)
+        ret = super(DANBO, self).collect_encoded(encoded_pts, encoded_views)
         if 'confd' in encoded_pts:
             ret['confd'] = encoded_pts['confd']
         ret['part_invalid'] = encoded_pts['part_invalid']
