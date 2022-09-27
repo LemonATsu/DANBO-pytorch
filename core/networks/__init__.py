@@ -18,14 +18,14 @@ def create_nerf(args, shared_nerf_kwargs, data_attrs):
         caster_class = 'graph'
     else:
         raise NotImplementedError(f'nerf class {args.nerf_type} is not implemented.')
-    
+
 
     # TODO: create embedder
 
     # TODO: create NeRF
 
     nerf_class_kwargs = {}
-    if 'graph' in args.nerf_type: #args.nerf_type.startswith('graph'):
+    if args.nerf_type in ['danbo', 'graph']:
         nerf_class_kwargs['node_W'] = args.node_W
         nerf_class_kwargs['voxel_res'] = args.voxel_res
         nerf_class_kwargs['voxel_feat'] = args.voxel_feat
@@ -56,7 +56,7 @@ def create_nerf(args, shared_nerf_kwargs, data_attrs):
 
     if 'graphrot' in args.nerf_type:
         nerf_class_kwargs['part_dims'] = args.part_dims
-        
+
     model = nerf_class(**shared_nerf_kwargs, **nerf_class_kwargs)
 
     # Model learned from fine-grained sampling
