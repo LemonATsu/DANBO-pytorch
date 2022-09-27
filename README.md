@@ -14,7 +14,8 @@ The repo supports both DANBO and A-NeRF training, allowing for easy comparisons 
 ## Cleaning in progress
 We are currently cleaning the code, so you may encounter runtime errors when running this repo.
 
-(Update Aug 2): Add environment setup and training instruction. 
+(Update Sep 26): Add missing file (core/networks/danbo.py). 
+(Update Aug 02): Add environment setup and training instruction. 
 
 <!--
 ## Testing
