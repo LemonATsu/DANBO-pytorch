@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-import lpips
+#import lpips
 
 from .utils.skeleton_utils import axisang_to_rot6d, get_geodesic_dists
 from torch.profiler import profile, record_function, ProfilerActivity
@@ -245,7 +245,8 @@ class Trainer:
         self.data_attrs = data_attrs
 
         if self.args.use_lpips_loss:
-            lpips_model = lpips.LPIPS(net='vgg', lpips=False) 
+            assert False, 'Not supported now!'
+            lpips_model = lpips.LPIPS(net='vgg', lpips=False)
             print('use perceptual')
             if not args.debug:
                 self.lpips = nn.DataParallel(lpips_model)
@@ -297,7 +298,7 @@ class Trainer:
                  'alpha': preds['acc_map'].mean().item(),
                  'cutoff': ray_caster.module.network.pe_fn.get_tau(),
                  **stats, **optim_stats}
-        
+
         return loss_dict, stats
 
     def get_fwd_args(self, batch):
@@ -359,18 +360,18 @@ class Trainer:
         # rgb loss of nerf
         results.append(self._compute_nerf_loss(batch, preds['rgb_map'], preds['acc_map']))
         if 'rgb0' in preds:
-            results.append(self._compute_nerf_loss(batch, preds['rgb0'], preds['acc0'], 
+            results.append(self._compute_nerf_loss(batch, preds['rgb0'], preds['acc0'],
                                                    coarse=True, loss_weight=args.coarse_weight))
         if args.use_lpips_loss:
             results.append(self._compute_lpips_loss(batch, preds['rgb_map'], preds['acc_map']))
             #if 'rgb0' in preds:
-            #    results.append(self._compute_lpips_loss(batch, preds['rgb0'], preds['acc0'], 
+            #    results.append(self._compute_lpips_loss(batch, preds['rgb0'], preds['acc0'],
             #                                            coarse=True, loss_weight=args.coarse_weight))
 
         # assignment-related loss
         if 'confd' in preds and args.agg_type == 'sigmoid':
             results.append(self._compute_soft_softmax_loss(preds, global_step))
-        
+
         # volume-related
         if args.opt_vol_scale:
             results.append(self._compute_volume_scale_loss())
@@ -419,8 +420,8 @@ class Trainer:
             loss_dict[reg_tag] = reg_loss
 
         return loss_dict, {stat_tag: psnr}
-    
-    def _compute_lpips_loss(self, batch, rgb_pred, acc_pred, base_bg=1.0, 
+
+    def _compute_lpips_loss(self, batch, rgb_pred, acc_pred, base_bg=1.0,
                             coarse=False, loss_weight=1.0):
         args = self.args
         p = args.patch_size
@@ -520,8 +521,8 @@ class Trainer:
         p = network.sigmoid(confd, part_invalid, mask_invalid=False, clamp=False)
         p_valid = (p * part_valid).sum(-1)
         loss_valid = (labels - p_valid).pow(2.).mean()
-        
-        soft_softmax_loss = args.soft_softmax_loss_coef * loss_valid 
+
+        soft_softmax_loss = args.soft_softmax_loss_coef * loss_valid
 
         # TODO: replace this with caster.get_prob
         # only consider place with positive density
@@ -543,14 +544,14 @@ class Trainer:
         scale = caster.network.graph_net.axis_scale
         init_scale = caster.network.graph_net.init_scale.to(scale.device)
         # limit the minimum size of the volume for numerical stability
-        scale = scale.abs().clamp(min=init_scale * 0.05) 
+        scale = scale.abs().clamp(min=init_scale * 0.05)
         scale_loss = torch.prod(scale, dim=-1).sum() * args.vol_scale_penalty
 
         scale_avg = scale.detach().mean(0)
         scale_x, scale_y, scale_z = scale_avg
-        
+
         return {'vol_scale_loss': scale_loss}, {'opt_scale_x': scale_x, 'opt_scale_y': scale_y, 'opt_scale_z': scale_z}
-    
+
     def _optim_step(self):
         '''
         step the optimizers for per-iteration parameter updates.
@@ -592,7 +593,7 @@ class Trainer:
                 self.popt_kwargs['popt_layer'].update_cache()
 
         return {'total_norm': total_norm, 'avg_norm': avg_norm}
-    
+
     def save_nerf(self, path, global_step):
         '''Save all state dict.
         path: path to save data
