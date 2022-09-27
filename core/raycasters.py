@@ -90,7 +90,7 @@ def create_raycaster(args, data_attrs, device=None):
     caster_nerf_kwargs, caster_class_kwargs, caster_preproc_kwargs = {}, {}, {}
     input_ch_graph, input_ch_voxel = 0, 0
     embedgraph_fn, embedvoxel_fn = None, None
-    if 'graph' in args.nerf_type:
+    if args.nerf_type in ['danbo', 'graph']:
         graph_input_fn, graph_dims = get_graph_input_fn(args, skel_type)
         embedgraph_fn, input_ch_graph = get_embedder(args.multires_graph, args.i_embed,
                                                      input_dims=graph_dims,
@@ -103,7 +103,7 @@ def create_raycaster(args, data_attrs, device=None):
         if args.gnn_backbone.endswith('cat'):
             voxel_input_dims *= 3
             if args.gnn_concat:
-                voxel_input_dims = voxel_input_dims * len(skel_type.joint_names) 
+                voxel_input_dims = voxel_input_dims * len(skel_type.joint_names)
 
         if args.gnn_backbone.startswith('CoordCat'):
             voxel_input_dims = args.voxel_feat + 3
@@ -146,7 +146,7 @@ def create_raycaster(args, data_attrs, device=None):
                    'n_framecodes': n_framecodes,
                    'skel_type': skel_type,
                    'density_scale': args.density_scale,
-                   'pts_embedder': get_pts_embedder(args, data_attrs), # here, temporarily 
+                   'pts_embedder': get_pts_embedder(args, data_attrs), # here, temporarily
                    'pe_fn': embed_fn,
                    'bones_pe_fn': embedbones_fn,
                    'dirs_pe_fn': embeddirs_fn,
@@ -166,7 +166,7 @@ def create_raycaster(args, data_attrs, device=None):
     ray_caster = caster_class(model,
                               network_fine=model_fine,
                               rest_poses=data_attrs['rest_pose'],
-                              single_net=args.single_net, 
+                              single_net=args.single_net,
                               align_bones=args.align_bones,
                               skel_type=skel_type,
                               **caster_class_kwargs)
@@ -283,7 +283,7 @@ def get_grad_vars(args, ray_caster):
     if args.finetune and args.fix_layer > 0:
         freeze_weights(network.pts_linears, args.fix_layer)
         freeze_weights(network_fine.pts_linears, args.fix_layer)
-    
+
     if args.finetune_light:
         for n, p in network.named_parameters():
             if not ('framecodes' in n):
@@ -313,11 +313,11 @@ def get_density_fn(args):
 class RayCaster(nn.Module):
 
     def __init__(self, network,
-                 network_fine=None, 
+                 network_fine=None,
                  single_net=False,
-                 rest_poses=None, 
-                 align_bones=None, 
-                 skel_type=None, 
+                 rest_poses=None,
+                 align_bones=None,
+                 skel_type=None,
                  **kwargs):
         super().__init__()
 
@@ -431,15 +431,15 @@ class RayCaster(nn.Module):
         """
 
         nerf_inputs = self.get_nerf_inputs(
-                                    pts, [rays_o[:, None, :], rays_d[:, None, :]], 
-                                    kp_batch, skts, bones, cam_idxs=cams, 
+                                    pts, [rays_o[:, None, :], rays_d[:, None, :]],
+                                    kp_batch, skts, bones, cam_idxs=cams,
                                     subject_idxs=subject_idxs,
                                     N_uniques=N_uniques,
                             )
 
         # Step 4: forwarding in NeRF and get coarse outputs
         raw, encoded = self.network(nerf_inputs, netchunk=netchunk)
-        ret_dict = self.network.raw2outputs(raw, z_vals, rays_d, 
+        ret_dict = self.network.raw2outputs(raw, z_vals, rays_d,
                                             raw_noise_std=raw_noise_std, pytest=pytest,
                                             encoded=encoded, B=preproc_kwargs['density_scale'],
                                             act_fn=preproc_kwargs['density_fn'])
@@ -463,8 +463,8 @@ class RayCaster(nn.Module):
                 encoded0 = encoded
 
             nerf_inputs_is = self.get_nerf_inputs(
-                                    pts_is, [rays_o[:, None, :], rays_d[:, None, :]], 
-                                    kp_batch, skts, bones, cam_idxs=cams, 
+                                    pts_is, [rays_o[:, None, :], rays_d[:, None, :]],
+                                    kp_batch, skts, bones, cam_idxs=cams,
                                     subject_idxs=subject_idxs,
                                     N_uniques=N_uniques,
                           )
@@ -484,10 +484,10 @@ class RayCaster(nn.Module):
 
         return self._collect_outputs(ret_dict, ret_dict0, encoded_is, encoded0)
 
-    def get_nerf_inputs(self, pts, rays, kps, skts, bones, 
-                        cam_idxs=None, subject_idxs=None, 
+    def get_nerf_inputs(self, pts, rays, kps, skts, bones,
+                        cam_idxs=None, subject_idxs=None,
                         N_uniques=1):
-        
+
         # TODO: internalize this to NeRF model?
         if self.align_bones is not None:
             if subject_idxs is None:
@@ -521,11 +521,11 @@ class RayCaster(nn.Module):
             inputs['cam_idxs'] = cam_idxs
 
         return inputs
-    
+
 
     def get_near_far(self, rays_o, rays_d, cyls, near=0., far=100., **kwargs):
         return get_near_far_in_cylinder(rays_o, rays_d, cyls, near=near, far=far)
-        
+
     @torch.no_grad()
     def render_mesh_density(self, kps, skts, bones, subject_idxs=None, radius=1.0, res=64,
                             render_kwargs=None, netchunk=1024*64, v=None):
@@ -538,7 +538,7 @@ class RayCaster(nn.Module):
         grid_pts = grid_pts.reshape(-1, 1, 3)
 
         # create density forward function (for batchify computation)
-        raw_density = self.render_pts_density(grid_pts, kps, skts, 
+        raw_density = self.render_pts_density(grid_pts, kps, skts,
                                               bones, netchunk)[..., :1]
 
         # swap x-y to match trimesh
@@ -627,7 +627,7 @@ class RayCaster(nn.Module):
         ret0: outputs from coarse network.
         '''
         collected = {'rgb_map': ret['rgb_map'], 'disp_map': ret['disp_map'],
-                     'acc_map': ret['acc_map'], 'alpha': ret['alpha'], 
+                     'acc_map': ret['acc_map'], 'alpha': ret['alpha'],
                      'T_i': ret['weights']}
         if ret0 is not None:
             collected['rgb0'] = ret0['rgb_map']
@@ -647,14 +647,14 @@ class RayCaster(nn.Module):
 
         if 'gradient' in encoded and self.training:
             collected['gradient'] = encoded['gradient']
-        
+
             if encoded0 is not None:
                 collected['gradient0'] = encoded0['gradient']
 
         return collected
 
     def init_bone_align_transforms(self):
-        from core.utils.skeleton_utils import get_axis_aligned_rotation 
+        from core.utils.skeleton_utils import get_axis_aligned_rotation
         skel_type = self.skel_type
         joint_names = skel_type.joint_names
         joint_trees = skel_type.joint_trees
@@ -664,9 +664,9 @@ class RayCaster(nn.Module):
         # search for children
         for i, parent in enumerate(joint_trees):
             children[parent].append(i)
-        
+
         N_rest_poses = len(self.rest_poses) if len(self.rest_poses.shape) == 3 else 1
-        
+
         transforms = torch.eye(4).reshape(1, 1, 4, 4).repeat(N_rest_poses, len(joint_trees), 1, 1)
         child_idxs = []
         for parent_idx, c in enumerate(children):
@@ -697,7 +697,7 @@ class RayCaster(nn.Module):
             child_idxs.append(child_idx)
         self.transforms = transforms
         self.child_idxs = np.array(child_idxs)
-        
+
     def update_embed_fns(self, global_step, args):
 
         self.network.update_embed_fns(global_step, args)
@@ -752,14 +752,14 @@ class GraphCaster(RayCaster):
     def __init__(self, *args, use_volume_near_far=False, **kwargs):
         super(GraphCaster, self).__init__(*args, **kwargs)
         self.use_volume_near_far = use_volume_near_far
-    
+
     @torch.no_grad()
     def get_near_far(self, rays_o, rays_d, cyls, near=0., far=100., skts=None):
 
         near, far = get_near_far_in_cylinder(rays_o, rays_d, cyls, near=near, far=far)
         if not self.use_volume_near_far:
             return near, far
-        
+
         assert skts is not None
         assert self.align_bones is not None, 'volume_near_far only works when self.align_bones="align"'
         B, J = skts.shape[:2]
@@ -773,12 +773,12 @@ class GraphCaster(RayCaster):
             rays_ot = ((align_transforms[..., :3, :3] @ rays_ot[..., None]) + \
                         align_transforms[..., :3, -1:]).reshape(B, J, 3)
             rays_dt = (align_transforms[..., :3, :3] @ rays_dt[..., None]).reshape(B, J, 3)
-        
+
         # scale the rays by the learned volume scale and find the intersections with the volumes
         axis_scale = self.network.graph_net.get_axis_scale().reshape(1, J, 3).abs()
         p_valid, v_valid, p_intervals = get_ray_box_intersections(
-                                            rays_ot / axis_scale, 
-                                            rays_dt / axis_scale, 
+                                            rays_ot / axis_scale,
+                                            rays_dt / axis_scale,
                                             bound_range=1.1, # intentionally makes the bound a bit larger
                                         )
         # now undo the scale so we can calculate the near far in the original space
@@ -788,7 +788,7 @@ class GraphCaster(RayCaster):
         norm_rays = rays_dt[v_valid].norm(dim=-1)
         # find the step size (near / far)
         # t * norm_ray + ray_o = p -> t =  (p - ray_o) / norm_rays
-        # -> distance is the norm 
+        # -> distance is the norm
         steps = (p_intervals - rays_ot[v_valid][..., None, :]).norm(dim=-1) / norm_rays[..., None]
 
         # extract near/far for each volume
@@ -836,13 +836,13 @@ class GraphCaster(RayCaster):
             # TODO: could be buggy if aways set N_uniques=1?
             encoded_graphs = self.encode_graphs(kps, bones, skts, network,
                                                 N_uniques=1, graph_input_fn=graph_input_fn)
-            encoded = self.encode_inputs(encoded_graphs, pts, None, 
-                                         kps, skts, bones, 
-                                         network=network, 
+            encoded = self.encode_inputs(encoded_graphs, pts, None,
+                                         kps, skts, bones,
+                                         network=network,
                                          kp_input_fn=kp_input_fn,
                                          bone_input_fn=bone_input_fn,
                                          pts_tr_fn=pts_tr_fn)
-            pts_out = fwd_pts(encoded['blend_feat'], 
+            pts_out = fwd_pts(encoded['blend_feat'],
                               subject_idxs=encoded['subject_idxs'])
 
             return pts_out
