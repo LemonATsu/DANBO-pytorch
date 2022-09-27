@@ -18,19 +18,19 @@ def get_pts_embedder(args, data_attrs):
     view_input_fn, view_dims = get_view_input_fn(args, skel_type)
 
     graph_input_fn = None
-    if 'graph' in args.nerf_type:
+    if args.nerf_type in ['graph', 'danbo']:
         graph_input_fn, graph_dims = get_graph_input_fn(args, skel_type)
 
     print(f'PPE: {pts_tr_fn.encoder_name}, KPE: {kp_input_fn.encoder_name},' +
           f'BPE: {bone_input_fn.encoder_name}, VPE: {view_input_fn.encoder_name}')
-    
-    pts_embedder = SamplePointsEmbedder(pts_tr_fn, ray_tr_fn, 
+
+    pts_embedder = SamplePointsEmbedder(pts_tr_fn, ray_tr_fn,
                                         kp_input_fn=kp_input_fn,
-                                        bone_input_fn=bone_input_fn, 
+                                        bone_input_fn=bone_input_fn,
                                         view_input_fn=view_input_fn,
                                         graph_input_fn=graph_input_fn,
                                         skel_type=skel_type)
-    
+
     return pts_embedder
 
 def get_pts_tr_fn(args):
@@ -242,7 +242,7 @@ def get_bone_dist(pts, kps, skel_type=SMPLSkeleton):
 
 def get_bone_dist_child(pts, kps, children, mask, skel_type=SMPLSkeleton, eps=1e-8):
     '''
-    mask: joints with no child (or multiple children)    
+    mask: joints with no child (or multiple children)
     '''
 
     joint_trees = torch.tensor(skel_type.joint_trees)
@@ -260,9 +260,9 @@ def get_bone_dist_child(pts, kps, children, mask, skel_type=SMPLSkeleton, eps=1e
 
 class SamplePointsEmbedder(nn.Module):
 
-    def __init__(self, 
-                 pts_tr_fn, 
-                 ray_tr_fn, 
+    def __init__(self,
+                 pts_tr_fn,
+                 ray_tr_fn,
                  kp_input_fn=None,
                  bone_input_fn=None,
                  view_input_fn=None,
@@ -279,7 +279,7 @@ class SamplePointsEmbedder(nn.Module):
         self.graph_input_fn = graph_input_fn
 
         self.skel_type = skel_type
-    
+
     def forward(self, *args, fwd_type='pts', **kwargs):
         if fwd_type == 'pts':
             return self.encode_pts(*args, **kwargs)
@@ -289,13 +289,13 @@ class SamplePointsEmbedder(nn.Module):
             return self.encode_graph_inputs(*args, **kwargs)
         else:
             raise NotImplementedError(f'Encoding for {fwd_type} is not implemented!')
-    
-    def encode_pts(self, pts, kps, skts, bones, 
+
+    def encode_pts(self, pts, kps, skts, bones,
                    align_transforms=None, rest_pose=None):
         '''
         align_transforms: transformation to make pts_t aligned with certain axis
         '''
-        
+
         if pts.shape[0] > kps.shape[0]:
             # expand kps to match the number of rays
             assert kps.shape[0] == 1
@@ -317,7 +317,7 @@ class SamplePointsEmbedder(nn.Module):
         r = self.bone_input_fn(pts_t, bones=bones)
 
         return {'v': v, 'r': r, 'pts_rp': pts_rp, 'pts_t': pts_t}
-    
+
     def encode_views(self, rays_o, rays_d, skts, refs=None):
         '''
         refs: reference tensors for expanding d
@@ -325,8 +325,8 @@ class SamplePointsEmbedder(nn.Module):
         rays_t = self.ray_tr_fn(rays_o, rays_d, skts)
         d = self.view_input_fn(rays_t, refs=refs)
         return {'d': d}
-    
-    def encode_graph_inputs(self, kps, bones, skts, N_uniques=1, 
+
+    def encode_graph_inputs(self, kps, bones, skts, N_uniques=1,
                             **kwargs):
         '''
         N_uniques: number of unique poses in the kps/bones/skts
@@ -417,7 +417,7 @@ class RelBoneDirEncoder(BaseEncoder):
     @property
     def encoder_name(self):
         return 'RBDEncoder'
-    
+
     def forward(self, bones, kps, skts, transforms=None, **kwargs):
         '''
         transforms: bone-align transformation
@@ -426,7 +426,7 @@ class RelBoneDirEncoder(BaseEncoder):
         parents = self.skel_type.joint_trees
         parent_loc = kps[..., parents, :]
         # apply transformation (3, 3) x (3, 1) + (3, 1)
-        rel_parent_loc = skts[..., :3, :3] @ parent_loc[..., None] + skts[..., :3, -1:] 
+        rel_parent_loc = skts[..., :3, :3] @ parent_loc[..., None] + skts[..., :3, -1:]
         if transforms is not None:
             transforms = transforms.reshape(N_graphs, N_joints, 4, 4)
             # apply transformation (3, 3) x (3, 1) + (3, 1)
@@ -441,7 +441,7 @@ class RootLocalEncoder(BaseEncoder):
     @property
     def encoder_name(self):
         return 'RLEncoder'
-    
+
     def forward(self, rays_o, rays_d, skts):
         local_rays = (skts[..., :1, :3, :3] @ rays_d[..., None])[..., 0]
         return local_rays
@@ -602,7 +602,7 @@ class BoneDistChildEncoder(BaseEncoder):
     def encoder_name(self):
         # intentionally not put 'Dist' here so that we can still dist. to joints as cutoff
         return 'BoneDistChild'
-    
+
     def init_bones(self):
         # some joint does not have a child
         children = get_children_joints(self.skel_type)
@@ -628,14 +628,14 @@ class BoneDistChildEncoder(BaseEncoder):
         mask = self.bone_masks.to(kps.device)
         # there's no bone for too, so just calculate relative distance
         joint_dist = pts_t.norm(p=2, dim=-1)
-        bone_dist = get_bone_dist_child(pts, kps, self.children.to(kps.device), 
+        bone_dist = get_bone_dist_child(pts, kps, self.children.to(kps.device),
                                         mask, self.skel_type)
         if torch.isnan(bone_dist).any():
             bone_dist = torch.nan_to_num(bone_dist, 0.0)
             import pdb; pdb.set_trace()
             print
         mask = mask.reshape(1, 1, -1)
-        v = bone_dist * mask + (1 - mask) * joint_dist 
+        v = bone_dist * mask + (1 - mask) * joint_dist
         return v
 
 
@@ -733,11 +733,11 @@ class AxisAngtoRot6DEncoder(BaseEncoder):
     @property
     def encoder_name(self):
         return 'Rot6D'
-    
+
     @property
     def dims(self):
         return 6
-    
+
     def forward(self, bones, *args, **kwargs):
         if bones.shape[-1] == 6:
             # already in 6D format.
@@ -753,11 +753,11 @@ class PartRotateEncoder(BaseEncoder):
     @property
     def encoder_name(self):
         return 'PartRot'
-    
+
     @property
     def dims(self):
         return 3 * self.part_dims
-    
+
     def forward(self, bones, *args, part_feat=None, align_transforms=None,**kwargs):
         if bones.shape[-1] == 6:
             # already in 6D format.
