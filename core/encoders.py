@@ -4,11 +4,14 @@ import torch.nn.functional as F
 import numpy as np
 from .utils.skeleton_utils import rot6d_to_rotmat, axisang_to_rot, axisang_to_quat, calculate_angle, \
                                   SMPLSkeleton, get_children_joints, axisang_to_rot6d
+from copy import deepcopy
+from .cutoff_embedder import get_embedder # TODO: rename this
 
 def get_pts_embedder(args, data_attrs):
     '''
     Get an embedder that encodes all the data for you (except P.E.)
     '''
+    embed_dims = {}
     skel_type = data_attrs['skel_type']
 
     pts_tr_fn = get_pts_tr_fn(args)
@@ -17,21 +20,149 @@ def get_pts_embedder(args, data_attrs):
     bone_input_fn, bone_dims = get_bone_input_fn(args, skel_type)
     view_input_fn, view_dims = get_view_input_fn(args, skel_type)
 
+    embed_dims['input_dims'] = input_dims
+    embed_dims['cutoff_dims'] = cutoff_dims
+    embed_dims['bone_dims'] = bone_dims
+    embed_dims['view_dims'] = view_dims
+
     graph_input_fn = None
-    if args.nerf_type in ['graph', 'danbo']:
+    if args.nerf_type in ['graph', 'danbo', 'danbo3d']:
         graph_input_fn, graph_dims = get_graph_input_fn(args, skel_type)
+        embed_dims['graph_dims'] = graph_dims
 
     print(f'PPE: {pts_tr_fn.encoder_name}, KPE: {kp_input_fn.encoder_name},' +
           f'BPE: {bone_input_fn.encoder_name}, VPE: {view_input_fn.encoder_name}')
-
-    pts_embedder = SamplePointsEmbedder(pts_tr_fn, ray_tr_fn,
+    
+    pts_embedder = SamplePointsEmbedder(pts_tr_fn, ray_tr_fn, 
                                         kp_input_fn=kp_input_fn,
-                                        bone_input_fn=bone_input_fn,
+                                        bone_input_fn=bone_input_fn, 
                                         view_input_fn=view_input_fn,
                                         graph_input_fn=graph_input_fn,
                                         skel_type=skel_type)
+    
+    return pts_embedder, embed_dims
 
-    return pts_embedder
+def get_pe_embedder(args, data_attrs, embed_dims):
+
+    network_chs = {}
+    network_pe_fns = {}
+
+    input_dims = embed_dims['input_dims']
+    cutoff_dims = embed_dims['cutoff_dims']
+    bone_dims = embed_dims['bone_dims']
+    view_dims = embed_dims['view_dims']
+    graph_dims = embed_dims.get('graph_dims', None)
+
+    skel_type = data_attrs["skel_type"]
+
+    cutoff_kwargs = {
+        "cutoff": args.use_cutoff,
+        "normalize_cutoff": args.normalize_cutoff,
+        "cutoff_dist": args.cutoff_mm * args.ext_scale,
+        "cutoff_inputs": args.cutoff_inputs,
+        "opt_cutoff": args.opt_cutoff,
+        "cutoff_dim": cutoff_dims,
+        "dist_inputs":  not(input_dims == cutoff_dims),
+    }
+
+    dist_cutoff_kwargs = deepcopy(cutoff_kwargs)
+    dist_cutoff_kwargs['cut_to_cutoff'] = args.cut_to_dist
+    dist_cutoff_kwargs['shift_inputs'] = args.cutoff_shift
+    embed_fn, input_ch = get_embedder(args.multires, args.i_embed,
+                                      input_dims=input_dims,
+                                      skel_type=skel_type,
+                                      freq_schedule=args.freq_schedule,
+                                      init_alpha=args.init_freq,
+                                      cutoff_kwargs=dist_cutoff_kwargs)
+    network_chs['input_ch'] = input_ch
+    network_pe_fns['pe_fn'] = embed_fn
+
+
+    # PE for bones (joint angles) 
+    input_ch_bones = bone_dims
+    if args.cutoff_bones:
+        bone_cutoff_kwargs = deepcopy(cutoff_kwargs)
+        bone_cutoff_kwargs["dist_inputs"] = True
+    else:
+        bone_cutoff_kwargs = {"cutoff": False}
+
+    embedbones_fn, input_ch_bones = get_embedder(args.multires_bones, args.i_embed,
+                                                input_dims=bone_dims,
+                                                skel_type=skel_type,
+                                                freq_schedule=args.freq_schedule,
+                                                init_alpha=args.init_freq,
+                                                cutoff_kwargs=bone_cutoff_kwargs)
+    network_chs['input_ch_bones'] = input_ch_bones
+    network_pe_fns['bones_pe_fn'] = embedbones_fn
+
+    # PE for view direction
+    input_ch_views = 0
+    embeddirs_fn = None
+    if args.use_viewdirs:
+        if args.cutoff_viewdir:
+            view_cutoff_kwargs = deepcopy(cutoff_kwargs)
+            view_cutoff_kwargs["dist_inputs"] = True
+        else:
+            view_cutoff_kwargs = {"cutoff": False}
+        view_cutoff_kwargs["cutoff_dim"] = len(skel_type.joint_trees)
+        embeddirs_fn, input_ch_views = get_embedder(args.multires_views, args.i_embed,
+                                                    input_dims=view_dims,
+                                                    skel_type=skel_type,
+                                                    freq_schedule=args.freq_schedule,
+                                                    init_alpha=args.init_freq,
+                                                    cutoff_kwargs=view_cutoff_kwargs)
+    network_chs['input_ch_views'] = input_ch_views
+    network_pe_fns['dirs_pe_fn'] = embeddirs_fn 
+
+    # PE for Graph
+    input_ch_graph, input_ch_voxel = 0, 0
+    embedgraph_fn, embedvoxel_fn = None, None
+    if args.nerf_type in ['graph', 'danbo', 'danbo3d']:
+        graph_dims = embed_dims['graph_dims']
+        embedgraph_fn, input_ch_graph = get_embedder(args.multires_graph, args.i_embed,
+                                                     input_dims=graph_dims,
+                                                     freq_schedule=args.freq_schedule,
+                                                     init_alpha=args.init_freq,
+                                                     skel_type=skel_type)
+
+        # TODO: full of hacks, fix them!
+        voxel_input_dims = args.voxel_feat
+        if args.gnn_backbone.endswith('cat'):
+            voxel_input_dims *= 3
+            if args.gnn_concat:
+                voxel_input_dims = voxel_input_dims * len(skel_type.joint_names) 
+
+        if args.gnn_backbone.startswith('CoordCat'):
+            voxel_input_dims = args.voxel_feat + 3
+        if args.input_coords:
+            voxel_input_dims = 3
+        if args.cat_coords:
+            voxel_input_dims += 3
+        if args.cat_all:
+            voxel_input_dims = voxel_input_dims * len(skel_type.joint_trees)
+        if args.nerf_type in ['danbo3d']:
+            voxel_input_dims -= 1
+
+        pe_input_dims = voxel_input_dims
+
+        embedvoxel_fn, input_ch_voxel = get_embedder(args.multires_voxel, args.i_embed,
+                                                     input_dims=pe_input_dims,
+                                                     freq_schedule=args.freq_schedule,
+                                                     init_alpha=args.init_freq,
+                                                     skel_type=skel_type)
+        network_chs['input_ch_graph'] = input_ch_graph
+        network_chs['input_ch_voxel'] = input_ch_voxel
+
+        network_pe_fns['graph_pe_fn'] = embedgraph_fn
+        network_pe_fns['voxel_pe_fn'] = embedvoxel_fn
+
+
+    output_ch = 5 if args.N_importance > 0 else 4
+    network_chs['output_ch'] = output_ch
+
+    return network_pe_fns, network_chs
+
+ 
 
 def get_pts_tr_fn(args):
 
@@ -242,7 +373,7 @@ def get_bone_dist(pts, kps, skel_type=SMPLSkeleton):
 
 def get_bone_dist_child(pts, kps, children, mask, skel_type=SMPLSkeleton, eps=1e-8):
     '''
-    mask: joints with no child (or multiple children)
+    mask: joints with no child (or multiple children)    
     '''
 
     joint_trees = torch.tensor(skel_type.joint_trees)
@@ -260,9 +391,9 @@ def get_bone_dist_child(pts, kps, children, mask, skel_type=SMPLSkeleton, eps=1e
 
 class SamplePointsEmbedder(nn.Module):
 
-    def __init__(self,
-                 pts_tr_fn,
-                 ray_tr_fn,
+    def __init__(self, 
+                 pts_tr_fn, 
+                 ray_tr_fn, 
                  kp_input_fn=None,
                  bone_input_fn=None,
                  view_input_fn=None,
@@ -279,7 +410,7 @@ class SamplePointsEmbedder(nn.Module):
         self.graph_input_fn = graph_input_fn
 
         self.skel_type = skel_type
-
+    
     def forward(self, *args, fwd_type='pts', **kwargs):
         if fwd_type == 'pts':
             return self.encode_pts(*args, **kwargs)
@@ -289,13 +420,13 @@ class SamplePointsEmbedder(nn.Module):
             return self.encode_graph_inputs(*args, **kwargs)
         else:
             raise NotImplementedError(f'Encoding for {fwd_type} is not implemented!')
-
-    def encode_pts(self, pts, kps, skts, bones,
+    
+    def encode_pts(self, pts, kps, skts, bones, 
                    align_transforms=None, rest_pose=None):
         '''
         align_transforms: transformation to make pts_t aligned with certain axis
         '''
-
+        
         if pts.shape[0] > kps.shape[0]:
             # expand kps to match the number of rays
             assert kps.shape[0] == 1
@@ -317,7 +448,7 @@ class SamplePointsEmbedder(nn.Module):
         r = self.bone_input_fn(pts_t, bones=bones)
 
         return {'v': v, 'r': r, 'pts_rp': pts_rp, 'pts_t': pts_t}
-
+    
     def encode_views(self, rays_o, rays_d, skts, refs=None):
         '''
         refs: reference tensors for expanding d
@@ -325,8 +456,8 @@ class SamplePointsEmbedder(nn.Module):
         rays_t = self.ray_tr_fn(rays_o, rays_d, skts)
         d = self.view_input_fn(rays_t, refs=refs)
         return {'d': d}
-
-    def encode_graph_inputs(self, kps, bones, skts, N_uniques=1,
+    
+    def encode_graph_inputs(self, kps, bones, skts, N_uniques=1, 
                             **kwargs):
         '''
         N_uniques: number of unique poses in the kps/bones/skts
@@ -417,7 +548,7 @@ class RelBoneDirEncoder(BaseEncoder):
     @property
     def encoder_name(self):
         return 'RBDEncoder'
-
+    
     def forward(self, bones, kps, skts, transforms=None, **kwargs):
         '''
         transforms: bone-align transformation
@@ -426,7 +557,7 @@ class RelBoneDirEncoder(BaseEncoder):
         parents = self.skel_type.joint_trees
         parent_loc = kps[..., parents, :]
         # apply transformation (3, 3) x (3, 1) + (3, 1)
-        rel_parent_loc = skts[..., :3, :3] @ parent_loc[..., None] + skts[..., :3, -1:]
+        rel_parent_loc = skts[..., :3, :3] @ parent_loc[..., None] + skts[..., :3, -1:] 
         if transforms is not None:
             transforms = transforms.reshape(N_graphs, N_joints, 4, 4)
             # apply transformation (3, 3) x (3, 1) + (3, 1)
@@ -441,7 +572,7 @@ class RootLocalEncoder(BaseEncoder):
     @property
     def encoder_name(self):
         return 'RLEncoder'
-
+    
     def forward(self, rays_o, rays_d, skts):
         local_rays = (skts[..., :1, :3, :3] @ rays_d[..., None])[..., 0]
         return local_rays
@@ -602,7 +733,7 @@ class BoneDistChildEncoder(BaseEncoder):
     def encoder_name(self):
         # intentionally not put 'Dist' here so that we can still dist. to joints as cutoff
         return 'BoneDistChild'
-
+    
     def init_bones(self):
         # some joint does not have a child
         children = get_children_joints(self.skel_type)
@@ -628,14 +759,14 @@ class BoneDistChildEncoder(BaseEncoder):
         mask = self.bone_masks.to(kps.device)
         # there's no bone for too, so just calculate relative distance
         joint_dist = pts_t.norm(p=2, dim=-1)
-        bone_dist = get_bone_dist_child(pts, kps, self.children.to(kps.device),
+        bone_dist = get_bone_dist_child(pts, kps, self.children.to(kps.device), 
                                         mask, self.skel_type)
         if torch.isnan(bone_dist).any():
             bone_dist = torch.nan_to_num(bone_dist, 0.0)
             import pdb; pdb.set_trace()
             print
         mask = mask.reshape(1, 1, -1)
-        v = bone_dist * mask + (1 - mask) * joint_dist
+        v = bone_dist * mask + (1 - mask) * joint_dist 
         return v
 
 
@@ -733,11 +864,11 @@ class AxisAngtoRot6DEncoder(BaseEncoder):
     @property
     def encoder_name(self):
         return 'Rot6D'
-
+    
     @property
     def dims(self):
         return 6
-
+    
     def forward(self, bones, *args, **kwargs):
         if bones.shape[-1] == 6:
             # already in 6D format.
@@ -753,11 +884,11 @@ class PartRotateEncoder(BaseEncoder):
     @property
     def encoder_name(self):
         return 'PartRot'
-
+    
     @property
     def dims(self):
         return 3 * self.part_dims
-
+    
     def forward(self, bones, *args, part_feat=None, align_transforms=None,**kwargs):
         if bones.shape[-1] == 6:
             # already in 6D format.

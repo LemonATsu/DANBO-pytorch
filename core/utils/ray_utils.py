@@ -119,6 +119,7 @@ def kp_to_valid_rays(poses, H, W, focal, kps=None, cylinder_params=None,
         w = W if isinstance(W, int) else W[i]
 
         ray_o, ray_d = get_rays(h, w, f, c2w, center=center)
+        ray_o, ray_d = ray_o.cpu(), ray_d.cpu()
 
         #w2c = np.linalg.inv(swap_mat(c2w.cpu().numpy()))
         w2c = nerf_c2w_to_extrinsic(c2w.cpu().numpy())
@@ -379,7 +380,7 @@ def get_near_far_in_cylinder_np(rays_o, rays_d, cyl, near=0.35, far=2.75):
 
     return new_near, new_far
 
-def get_ray_box_intersections(rays_o, rays_d, bound_range=1., eps=1e-6):
+def get_ray_box_intersections(rays_o, rays_d, bound_range=1., eps=1e-4):
     """ Calculate near and far plane by finding intersections with the learned volumes
     ref: https://github.com/zju3dv/animatable_nerf/blob/master/lib/utils/if_nerf/if_nerf_data_utils.py
     """

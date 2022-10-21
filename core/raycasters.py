@@ -17,139 +17,34 @@ from .utils.skeleton_utils import *
 def create_raycaster(args, data_attrs, device=None):
     """Instantiate NeRF's MLP model.
     """
+    # TODO: make PE encoder to have their own function
+    caster_nerf_kwargs, caster_class_kwargs, caster_preproc_kwargs = {}, {}, {}
+
     skel_type = data_attrs["skel_type"]
     near, far = data_attrs["near"], data_attrs["far"]
     n_framecodes = data_attrs["n_views"] if args.n_framecodes is None else args.n_framecodes
 
+    # create point transformations
+    pts_embedder, embed_dims = get_pts_embedder(args, data_attrs) 
+    network_pe_fns, network_dims = get_pe_embedder(args, data_attrs, embed_dims)
+
     if args.vol_cal_scale:
         data_attrs['skel_profile'] = get_skel_profile_from_rest_pose(data_attrs['rest_pose'], skel_type=skel_type)
-
-    pts_tr_fn = get_pts_tr_fn(args)
-    ray_tr_fn = get_ray_tr_fn(args)
-    kp_input_fn, input_dims, cutoff_dims = get_kp_input_fn(args, skel_type)
-    bone_input_fn, bone_dims = get_bone_input_fn(args, skel_type)
-    view_input_fn, view_dims = get_view_input_fn(args, skel_type)
-    print(f'PPE: {pts_tr_fn.encoder_name}, KPE: {kp_input_fn.encoder_name},' +
-          f'BPE: {bone_input_fn.encoder_name}, VPE: {view_input_fn.encoder_name}')
-
-    cutoff_kwargs = {
-        "cutoff": args.use_cutoff,
-        "normalize_cutoff": args.normalize_cutoff,
-        "cutoff_dist": args.cutoff_mm * args.ext_scale,
-        "cutoff_inputs": args.cutoff_inputs,
-        "opt_cutoff": args.opt_cutoff,
-        "cutoff_dim": cutoff_dims,
-        "dist_inputs":  not(input_dims == cutoff_dims),
-    }
-
-    # function to encode input (RGB/view to PE)
-    embedpts_fn, input_ch_pts = None, None # only for mnerf
-    dist_cutoff_kwargs = deepcopy(cutoff_kwargs)
-    dist_cutoff_kwargs['cut_to_cutoff'] = args.cut_to_dist
-    dist_cutoff_kwargs['shift_inputs'] = args.cutoff_shift
-    embed_fn, input_ch = get_embedder(args.multires, args.i_embed,
-                                      input_dims=input_dims,
-                                      skel_type=skel_type,
-                                      freq_schedule=args.freq_schedule,
-                                      init_alpha=args.init_freq,
-                                      cutoff_kwargs=dist_cutoff_kwargs)
-
-    input_ch_bones = bone_dims
-    if args.cutoff_bones:
-        bone_cutoff_kwargs = deepcopy(cutoff_kwargs)
-        bone_cutoff_kwargs["dist_inputs"] = True
-    else:
-        bone_cutoff_kwargs = {"cutoff": False}
-
-    embedbones_fn, input_ch_bones = get_embedder(args.multires_bones, args.i_embed,
-                                                input_dims=bone_dims,
-                                                skel_type=skel_type,
-                                                freq_schedule=args.freq_schedule,
-                                                init_alpha=args.init_freq,
-                                                cutoff_kwargs=bone_cutoff_kwargs)
-
-    input_ch_views = 0
-    embeddirs_fn = None
-    # no cutoff for view dir
-    if args.use_viewdirs:
-        if args.cutoff_viewdir:
-            view_cutoff_kwargs = deepcopy(cutoff_kwargs)
-            view_cutoff_kwargs["dist_inputs"] = True
-        else:
-            view_cutoff_kwargs = {"cutoff": False}
-        view_cutoff_kwargs["cutoff_dim"] = len(skel_type.joint_trees)
-        embeddirs_fn, input_ch_views = get_embedder(args.multires_views, args.i_embed,
-                                                    input_dims=view_dims,
-                                                    skel_type=skel_type,
-                                                    freq_schedule=args.freq_schedule,
-                                                    init_alpha=args.init_freq,
-                                                    cutoff_kwargs=view_cutoff_kwargs)
-
-
-    # TODO: not the best way to have this
-    caster_nerf_kwargs, caster_class_kwargs, caster_preproc_kwargs = {}, {}, {}
-    input_ch_graph, input_ch_voxel = 0, 0
-    embedgraph_fn, embedvoxel_fn = None, None
-    if args.nerf_type in ['danbo', 'graph']:
-        graph_input_fn, graph_dims = get_graph_input_fn(args, skel_type)
-        embedgraph_fn, input_ch_graph = get_embedder(args.multires_graph, args.i_embed,
-                                                     input_dims=graph_dims,
-                                                     freq_schedule=args.freq_schedule,
-                                                     init_alpha=args.init_freq,
-                                                     skel_type=skel_type)
-
-        # TODO: full of hacks, fix them!
-        voxel_input_dims = args.voxel_feat
-        if args.gnn_backbone.endswith('cat'):
-            voxel_input_dims *= 3
-            if args.gnn_concat:
-                voxel_input_dims = voxel_input_dims * len(skel_type.joint_names)
-
-        if args.gnn_backbone.startswith('CoordCat'):
-            voxel_input_dims = args.voxel_feat + 3
-        if args.input_coords:
-            voxel_input_dims = 3
-        if args.cat_coords:
-            voxel_input_dims += 3
-        if args.cat_all:
-            voxel_input_dims = voxel_input_dims * len(skel_type.joint_trees)
-        if args.gnn_backbone.startswith('MVP'):
-            voxel_input_dims -= 1
-
-        pe_input_dims = voxel_input_dims
-
-        embedvoxel_fn, input_ch_voxel = get_embedder(args.multires_voxel, args.i_embed,
-                                                     input_dims=pe_input_dims,
-                                                     freq_schedule=args.freq_schedule,
-                                                     init_alpha=args.init_freq,
-                                                     skel_type=skel_type)
-        caster_nerf_kwargs['input_ch_graph'] = input_ch_graph
-        caster_nerf_kwargs['input_ch_voxel'] = input_ch_voxel
-
-        caster_nerf_kwargs['graph_pe_fn'] = embedgraph_fn
-        caster_nerf_kwargs['voxel_pe_fn'] = embedvoxel_fn
-        caster_nerf_kwargs['mask_vol_prob'] = args.mask_vol_prob
-        caster_nerf_kwargs['agg_type'] = args.agg_type
-
-
-    output_ch = 5 if args.N_importance > 0 else 4
+    
+    caster_nerf_kwargs['mask_vol_prob'] = args.mask_vol_prob
+    caster_nerf_kwargs['agg_type'] = args.agg_type
     skips = [4]
 
     nerf_kwargs = {'D': args.netdepth, 'W': args.netwidth,
-                   'input_ch': input_ch,
-                   'input_ch_bones': input_ch_bones,
-                   'input_ch_views': input_ch_views,
-                   'output_ch': output_ch, 'skips': skips,
+                   **network_dims,
+                   **network_pe_fns,
+                   'pts_embedder': pts_embedder,
                    'use_viewdirs': args.use_viewdirs,
                    'use_framecode': args.opt_framecode,
                    'framecode_ch': args.framecode_size,
                    'n_framecodes': n_framecodes,
                    'skel_type': skel_type,
                    'density_scale': args.density_scale,
-                   'pts_embedder': get_pts_embedder(args, data_attrs), # here, temporarily
-                   'pe_fn': embed_fn,
-                   'bones_pe_fn': embedbones_fn,
-                   'dirs_pe_fn': embeddirs_fn,
                    'view_W': args.netwidth_view,
                    **caster_nerf_kwargs}
 
@@ -166,7 +61,7 @@ def create_raycaster(args, data_attrs, device=None):
     ray_caster = caster_class(model,
                               network_fine=model_fine,
                               rest_poses=data_attrs['rest_pose'],
-                              single_net=args.single_net,
+                              single_net=args.single_net, 
                               align_bones=args.align_bones,
                               skel_type=skel_type,
                               **caster_class_kwargs)
@@ -210,11 +105,6 @@ def create_raycaster(args, data_attrs, device=None):
 
     ##########################
     preproc_kwargs = {
-        'pts_tr_fn': pts_tr_fn,
-        'ray_tr_fn': ray_tr_fn,
-        'kp_input_fn': kp_input_fn,
-        'view_input_fn': view_input_fn,
-        'bone_input_fn': bone_input_fn,
         'density_scale': args.density_scale,
         'density_fn': get_density_fn(args),
         **caster_preproc_kwargs,
@@ -251,6 +141,8 @@ def create_raycaster(args, data_attrs, device=None):
     optimizer.zero_grad()
 
     return render_kwargs_train, render_kwargs_test, start, grad_vars, optimizer, loaded_ckpt
+
+
 
 def get_grad_vars(args, ray_caster):
 
@@ -754,7 +646,7 @@ class GraphCaster(RayCaster):
         self.use_volume_near_far = use_volume_near_far
 
     @torch.no_grad()
-    def get_near_far(self, rays_o, rays_d, cyls, near=0., far=100., skts=None):
+    def get_near_far(self, rays_o, rays_d, cyls, near=0., far=100., skts=None, training_bound=1.3):
 
         near, far = get_near_far_in_cylinder(rays_o, rays_d, cyls, near=near, far=far)
         if not self.use_volume_near_far:
@@ -776,10 +668,11 @@ class GraphCaster(RayCaster):
 
         # scale the rays by the learned volume scale and find the intersections with the volumes
         axis_scale = self.network.graph_net.get_axis_scale().reshape(1, J, 3).abs()
+        bound_range = training_bound if self.training else 1.1
         p_valid, v_valid, p_intervals = get_ray_box_intersections(
                                             rays_ot / axis_scale,
                                             rays_dt / axis_scale,
-                                            bound_range=1.1, # intentionally makes the bound a bit larger
+                                            bound_range=training_bound, # intentionally makes the bound a bit larger
                                         )
         # now undo the scale so we can calculate the near far in the original space
         axis_scale = axis_scale.expand(B, J, 3)
