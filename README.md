@@ -1,5 +1,5 @@
 # DANBO: Disentangled Articulated Neural Body Representations via Graph Neural Networks 
-### [Paper](https://arxiv.org/abs/2205.01666) | [Website](https://lemonatsu.github.io/danbo/) | 
+### [Paper](https://arxiv.org/abs/2205.01666) | [Website](https://lemonatsu.github.io/danbo/) | [Data](https://github.com/LemonATsu/DANBO-pytorch#dataset)
 ![](imgs/teaser.gif)
 >**DANBO: Disentangled Articulated Neural Body Representations via Graph Neural Networks**\
 >[Shih-Yang Su](https://lemonatsu.github.io/), [Timur Bagautdinov](https://scholar.google.ch/citations?user=oLi7xJ0AAAAJ&hl=en), and [Helge Rhodin](http://helge.rhodin.de/)\
