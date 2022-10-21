@@ -55,7 +55,7 @@ The trained weights and log can be found in ```logs/danbo_h36m```.
 ```
 python run_nerf.py --config configs/perfcap/danbo_fast.txt --basedir logs  --expname danbo_perfcap --vol_scale_penalty 0.0001
 ```
-This config speeds up training for 3x with less memory consumption by (1) sampling only within the per-part volumes, which requires (2) less samples-per-ray for training. Note that this is not included in the original paper. The flag `vol_scale_penalty` constraints the size of the per-part volumes.
+This config speeds up training for 3x with less memory consumption by (1) sampling only within the [per-part volumes](https://github.com/LemonATsu/DANBO-pytorch/blob/main/configs/h36m_zju/danbo_fast.txt#L66), which requires (2) [less samples-per-ray for training and rendering](https://github.com/LemonATsu/DANBO-pytorch/blob/main/configs/h36m_zju/danbo_fast.txt#L60-L61). Note that this is not included in the original paper. The flag `vol_scale_penalty` here constraints the size of the per-part volumes.
 
 You can also train A-NeRF without pose refinement via
 ```
