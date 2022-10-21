@@ -93,7 +93,7 @@ def load_data(args):
     if isinstance(dataset, SurrealDataset) or\
             (isinstance(dataset, ConcatH5Dataset) and isinstance(dataset.datasets[0], SurrealDataset)):
         render_data = ConcatH5Dataset([SurrealDataset(DATASET_CATALOG['surreal']['female'], split='train',
-                                     N_rand_kps='gnn_val_15', subject='female', N_samples=1)]).get_render_data()
+                                       subject='female', N_samples=1)]).get_render_data()
         print('load surreal validation set')
     elif isinstance(dataset, ConcatH5Dataset) and len(dataset.datasets) == 1 and type(dataset.datasets[0]) == ZJUMocapDataset:
         subject = args.subject[0]

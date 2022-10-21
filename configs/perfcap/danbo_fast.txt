@@ -1,0 +1,77 @@
+expname = mix_graph
+basedir = ./logs
+
+dataset_type = [perfcap]
+subject = [nadia]
+rand_train_kps = gnn_400
+use_background = True
+fg_ratio = 1.0
+chunk = 4096
+
+ext_scale = 0.00100
+bone_type = Nope
+kp_dist_type = reldist
+view_type = relray
+ray_tr_type = root_local
+graph_input_type = rot6d
+
+single_net = True
+netwidth = 256
+netwidth_fine = 256
+netdepth = 8
+multires = 1
+multires_views = 4
+multires_voxel = 6
+multires_graph = 5
+nerf_type = graph
+gnn_backbone = FGNNcat
+agg_backbone = vox_MIXGNN
+node_W = 128
+voxel_res = 16
+voxel_feat = 5
+soft_softmax_loss_coef = 0.001
+vol_scale_penalty = 0.001
+mask_root=True
+mask_vol_prob = True
+opt_vol_scale = True
+vol_cal_scale = True
+gcn_fc_D = 1
+align_bones = align
+attenuate_feat = True
+agg_type = sigmoid
+agg_W = 32
+
+use_cutoff = False
+cutoff_viewdir = False
+cutoff_inputs = False
+use_viewdirs = True
+cutoff_shift = True
+cut_to_dist = True
+
+image_batching = True
+mask_image = True
+load_refined = True
+N_sample_images = 16
+
+# general training
+N_rand = 3072
+N_samples = 32
+N_importance = 16
+n_iters = 300000
+lrate_decay = 500000
+decay_unit = 1
+loss_fn = L1
+use_volume_near_far = True
+
+# pose_opt setting
+opt_framecode = True
+framecode_size = 128
+
+raw_noise_std = 1e0
+render_factor = 2
+
+# logging
+i_testset = 20000
+i_weights = 10000
+render_factor = 2
+

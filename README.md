@@ -11,49 +11,13 @@ DANBO enables learning a more generalizable 3D body model with better data effic
 The repo supports both DANBO and A-NeRF training, allowing for easy comparisons to our methods.
 
 
-## Cleaning in progress
-We are currently cleaning the code, so you may encounter runtime errors when running this repo.
-
+## Updates
+(Update Oct 20): add fast training config (`config/h36m_zju/danbo_fast.txt`), which speeds up training over 3x and less memory consumption with nearly the same performance. 
 (Update Sep 26): Add missing file (core/networks/danbo.py). 
 (Update Aug 02): Add environment setup and training instruction. 
 
-<!--
-## Testing
-You can use [`run_render.py`](run_render.py) to render the learned models under different camera motions, or retarget the character to different poses by
-```
-python run_render.py --nerf_args logs/surreal_model/args.txt --ckptpath logs/surreal_model/150000.tar \
-                     --dataset surreal --entry hard --render_type bullet --render_res 512 512 \
-                     --white_bkgd --runname surreal_bullet
-```
-Here, 
-- `--dataset` specifies the data source for poses, 
-- `--entry` specifices the particular subset from the dataset to render, 
-- `--render_type` defines the camera motion to use, and
-- `--render_res` specifies the height and width of the rendered images.
+The current code should work without any issue. We may still improve/change the code here and there.
 
-Therefore, the above command will render 512x512 the learned SURREAL character with bullet-time effect like the following (resizsed to 256x256):
-
-![](imgs/bullet_time.gif)
-
-The output can be found in `render_output/surreal_bullet/`.
-	
-You can also extract mesh for the learned character:
-```
-python run_render.py --nerf_args logs/surreal_model/args.txt --ckptpath logs/surreal_model/150000.tar \
-                     --dataset surreal --entry hard --render_type mesh --runname surreal_mesh
-```
-You can find the extracted `.ply` files in `render_output/surreal_mesh/meshes/`.
-
-To render the mesh as in the paper, run
-```
-python render_mesh.py --expname surreal_mesh 
-```
-which will output the rendered images in `render_output/surreal_mesh/mesh_render/` like the following:
-
-![](imgs/mesh_render.gif)
-
-You can change the setting in [`run_render.py`](run_render.py) to create your own rendering configuration.
--->
 ## Setup
 
 ### Setup environment
@@ -73,20 +37,59 @@ pip install -r requirements.txt
 
 ```
 
+### Dataset
+We are not allowed to share the pre-processed data for H3.6M and MonoPerfcap due to license terms. If you need access to the pre-trained models and the pre-processed dataset, please reach out to `shihyang[at]cs.ubc.ca`.
+
 ## Training
 We provide template training configurations in `configs/` for different settings. 
 
-To train DANBO on the H36M dataset 
+To train DANBO on the H36M dataset with L1 loss
 ```
-python run_nerf.py --config configs/h36m_zju/danbo_base.txt --basedir logs  --expname danbo_h36m
+python run_nerf.py --config configs/h36m_zju/danbo_base.txt --basedir logs  --expname danbo_h36m --loss_fn L1
 ```
 The trained weights and log can be found in ```logs/danbo_h36m```.
+
+**Update**: you can also train DANBO with the *fast configuration*
+```
+python run_nerf.py --config configs/perfcap/danbo_fast.txt --basedir logs  --expname danbo_perfcap --vol_scale_penalty 0.0001
+```
+This config speeds up training for 3x with less memory consumption by (1) sampling only within the per-part volumes, which requires (2) less samples-per-ray for training. Note that this is not included in the original paper. The flag `vol_scale_penalty` constraints the size of the per-part volumes.
 
 You can also train A-NeRF without pose refinement via
 ```
 python run_nerf.py --config configs/h36m_zju/anerf_base --basedir logs_anerf --num_workers 8 --subject S6 --expname anerf_S6
 ```
 This will train A-NeRF on H36M subject S6 with with 8 worker threads for the dataloader. 
+
+## Testing
+You can use [`run_render.py`](run_render.py) to render the learned models under different camera motions, or retarget the character to different poses by
+```
+python run_render.py --nerf_args logs/surreal_model/args.txt --ckptpath logs/surreal_model/150000.tar \
+                     --dataset surreal --entry hard --render_type bullet --render_res 512 512 \
+                     --white_bkgd --runname surreal_bullet
+```
+Here, 
+- `--dataset` specifies the data source for poses, 
+- `--entry` specifices the particular subset from the dataset to render, 
+- `--render_type` defines the camera motion to use, and
+- `--render_res` specifies the height and width of the rendered images.
+
+The output can be found in `render_output/surreal_bullet/`.
+	
+You can also extract mesh for the learned character:
+```
+python run_render.py --nerf_args logs/surreal_model/args.txt --ckptpath logs/surreal_model/150000.tar \
+                     --dataset surreal --entry hard --render_type mesh --runname surreal_mesh
+```
+You can find the extracted `.ply` files in `render_output/surreal_mesh/meshes/`.
+
+To render the mesh as in the paper, run
+```
+python render_mesh.py --expname surreal_mesh 
+```
+which will output the rendered images in `render_output/surreal_mesh/mesh_render/`.
+
+You can change the setting in [`run_render.py`](run_render.py) to create your own rendering configuration.
 
 ## Citation
 ```
