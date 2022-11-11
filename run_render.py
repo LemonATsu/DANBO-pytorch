@@ -185,7 +185,7 @@ def load_render_data(args, nerf_args, poseopt_layer=None, rest_pose=None, opt_fr
     # 3. camera stuff: focals, c2ws, ... etc
     refined = None if not args.render_refined else catalog.get('refined', None)
     c2ws, centers, focals, H, W = read_camera_data(data_h5)
-    kps, bones, rest_pose_h5 = read_pose_data(data_h5, refined=refined, poseopt_layer=poseopt_layer) 
+    kps, bones, rest_pose_h5 = read_pose_data(data_h5, refined=refined, poseopt_layer=poseopt_layer)
     rest_pose = rest_pose if rest_pose is not None else rest_pose_h5
     # a map for poseopt kp. sometimes the kp idxs will be different from the poseopt ones
     render_data['idx_map'] = catalog.get('idx_map', None)
@@ -243,8 +243,8 @@ def load_render_data(args, nerf_args, poseopt_layer=None, rest_pose=None, opt_fr
         kps, skts, c2ws, cam_idxs, focals, bones, centers = load_selected(
                                                                 data_h5, c2ws, focals,
                                                                 rest_pose, pose_keys,
-                                                                selected_idxs, 
-                                                                centers=centers, 
+                                                                selected_idxs,
+                                                                centers=centers,
                                                                 **render_data)
     elif args.render_type.startswith('val'):
         print(f'Load data for valditation!')
@@ -273,12 +273,12 @@ def load_render_data(args, nerf_args, poseopt_layer=None, rest_pose=None, opt_fr
                 bg_indices = np.zeros((len(cam_idxs),), dtype=np.int32)
             if args.dataset == 'perfcap':
                 # treat frame properly
-                #cam_idxs = find_cam_idxs_via_kp_project(data_h5, kps, c2ws, H, W, 
+                #cam_idxs = find_cam_idxs_via_kp_project(data_h5, kps, c2ws, H, W,
                 #                                        focals, centers, val_start=catalog['val_start'])
                 h5_file = h5py.File(data_h5, 'r')
                 last_idx = h5_file['img_shape'][0] - catalog['val_start'] - 1
                 h5_file.close()
-                cam_idxs = cam_idxs * 0 + last_idx 
+                cam_idxs = cam_idxs * 0 + last_idx
                 #cam_idxs = np.arange(len(cam_idxs))
             else:
                 cam_idxs = cam_idxs * 0 -1
@@ -425,9 +425,9 @@ def init_catalog(args, n_bullet=10):
             #'data_h5': f'data/h36m_zju/{k}_train.h5' ,
             #'data_h5': f'data/h36m_zju/{k}_anim.h5' ,
             'data_h5': f'data/h36m_zju/{k}_test.h5' ,
-            #'val': set_dict(np.arange(h36m_zju_num_eval[k])[meshviz[k]:meshviz[k]+1], skip=1, length=1), 
-            'val': set_dict(np.arange(h36m_zju_num_eval[k]), skip=1, length=1), 
-            'bullet': set_dict(np.arange(h36m_zju_num_eval[k])[meshviz[k]:meshviz[k]+1], n_bullet=3, center_cam=False, center_kps=True), 
+            #'val': set_dict(np.arange(h36m_zju_num_eval[k])[meshviz[k]:meshviz[k]+1], skip=1, length=1),
+            'val': set_dict(np.arange(h36m_zju_num_eval[k]), skip=1, length=1),
+            'bullet': set_dict(np.arange(h36m_zju_num_eval[k])[meshviz[k]:meshviz[k]+1], n_bullet=3, center_cam=False, center_kps=True),
             'animate': set_dict([0, 20, 40], n_step=10, center_cam=False, center_kps=True,
                             joints=np.arange(24), from_rest=True, undo_rot=False),
         } for k in ['S1', 'S5', 'S6', 'S7', 'S8', 'S9', 'S11']
@@ -456,7 +456,7 @@ def init_catalog(args, n_bullet=10):
         'val': set_dict(np.arange(49)[:1], skip=1, length=1),
     }
     """
- 
+
     # SURREAL
     #easy_idx = [10, 70, 350, 420, 490, 910, 980, 1050]
     easy_idx = [10]
@@ -658,9 +658,9 @@ def load_correction(pose_h5, c2ws, focals, rest_pose, pose_keys,
     return kps, skts, c2ws, cam_idxs, focals
 
 def load_retarget(kps, bones, c2ws, focals, rest_pose,
-                  selected_idxs, length, skip=1, centers=None, 
+                  selected_idxs, length, skip=1, centers=None,
                   center_kps=False, idx_map=None, is_surreal=False,
-                  cam_factor=None, undo_rot=False, is_neuralbody=False, 
+                  cam_factor=None, undo_rot=False, is_neuralbody=False,
                   is_h36m_zju=False):
 
     l = length
@@ -739,7 +739,7 @@ def load_animate(pose_h5, c2ws, focals, rest_pose, pose_keys,
     if rotate_y_ang > 0:
         import math
         rot_mat = rotate_y(math.radians(rotate_y_ang))
-        c2ws = rot_mat[None] @ c2ws 
+        c2ws = rot_mat[None] @ c2ws
     c2ws[..., 0, -1] *= 0.5
     c2ws = generate_bullet_time(c2ws, 10).transpose(1, 0, 2, 3).reshape(-1, 4, 4)
 
@@ -765,7 +765,7 @@ def load_animate(pose_h5, c2ws, focals, rest_pose, pose_keys,
     elif center_cam:
         kps[..., :, 0] -= shift_x[:, None]
         kps[..., :, 1] -= shift_y[:, None]
-    
+
     # forcefully rewrite the first pose to zero pose
     if from_rest:
         bones[:1, 1:] = 0
@@ -916,7 +916,7 @@ def load_bullettime(pose_h5, c2ws, focals, rest_pose, pose_keys,
         focals = focals[cam_idxs]
         h5_file.close()
 
-        
+
     if center_cam:
         shift_x = c2ws[..., 0, -1].copy()
         shift_y = c2ws[..., 1, -1].copy()
@@ -936,7 +936,7 @@ def load_bullettime(pose_h5, c2ws, focals, rest_pose, pose_keys,
     # prepare pose
     # TODO: hard-coded for now so we can quickly view the outcomes!
     if refined is None:
-        kps, bones = dd.io.load(pose_h5, pose_keys, sel=dd.aslice[selected_idxs//3, ...])
+        kps, bones = dd.io.load(pose_h5, pose_keys, sel=dd.aslice[selected_idxs, ...])
         selected_idxs = find_idxs_with_map(selected_idxs, idx_map)
     else:
         selected_idxs = find_idxs_with_map(selected_idxs, idx_map)
@@ -977,7 +977,7 @@ def load_selected(pose_h5, c2ws, focals, rest_pose, pose_keys,
         focals = np.array([focals] * len(selected_idxs))
     else:
         focals = focals[selected_idxs]
-    
+
     if centers is not None:
         centers = centers[selected_idxs]
 
@@ -1108,8 +1108,8 @@ def read_camera_data(data_h5):
     return  c2ws, centers, focals, H, W
 
 def read_pose_data(
-        data_h5, 
-        poseopt_layer=None, 
+        data_h5,
+        poseopt_layer=None,
         refined=None):
     '''
     Read poses from either
@@ -1135,7 +1135,7 @@ def read_pose_data(
 
     return kp3d, bones, rest_pose
 
-def find_cam_idxs_via_kp_project(h5_path, kps, c2ws, H, W, 
+def find_cam_idxs_via_kp_project(h5_path, kps, c2ws, H, W,
                                  focals, centers, val_start=327,
                                  ):
 
