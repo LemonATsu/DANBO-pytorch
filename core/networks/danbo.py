@@ -401,7 +401,7 @@ class DANBO(NeRF):
         nominator = torch.exp(logit - max_logit) * valid
         denominator = torch.sum(nominator + eps, dim=-1, keepdim=True)
 
-        return nominator / denominator.clamp(min=1)
+        return nominator / denominator.clamp(min=eps)
 
     def sigmoid(self, logit, invalid,
                 mask_invalid=True, clamp=True,
