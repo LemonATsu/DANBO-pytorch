@@ -386,7 +386,7 @@ def get_ray_box_intersections(rays_o, rays_d, bound_range=1., eps=1e-4):
     """
 
     # basic algorithm: find the intersection with the min/max x, y, z values (6 points)
-    # and see if all 6 intersections still falls within the boxes, 
+    # and see if all 6 intersections still falls within the boxes,
     # i.e., all intesection are within [min, max]
     # let y = where x_min happened (and likewise x_max, and y, z ...)
     # we solve y = o[x] + td[x]  ->  (x_min - o[x]) / d[x] = t
@@ -395,21 +395,21 @@ def get_ray_box_intersections(rays_o, rays_d, bound_range=1., eps=1e-4):
     bounds = bound_range * torch.ones(1, J, 2, 3)
     bounds[..., 0, :] *= -1
 
-    t = (bounds - rays_o[..., None, :]) / rays_d[..., None, :]
+    t = (bounds.double() - rays_o[..., None, :]) / rays_d[..., None, :]
     t = t.reshape(B, J, 6, 1)
 
     # and know take the step t to the point where we have the minimum
-    # intersection has all 6 points (min,max for x, y, z) within bound 
-    p_intersect = t * rays_d[..., None, :] + rays_o[..., None, :]
+    # intersection has all 6 points (min,max for x, y, z) within bound
+    p_intersect = (t * rays_d[..., None, :] + rays_o[..., None, :]).float()
     p_valid = (p_intersect[..., 0] <=  ( bound_range + eps)) * \
               (p_intersect[..., 0] >=  (-bound_range - eps)) * \
               (p_intersect[..., 1] <=  ( bound_range + eps)) * \
               (p_intersect[..., 1] >=  (-bound_range - eps)) * \
               (p_intersect[..., 2] <=  ( bound_range + eps)) * \
-              (p_intersect[..., 2] >=  (-bound_range - eps)) 
+              (p_intersect[..., 2] >=  (-bound_range - eps))
     # should intersect at exactly 2 points
     v_valid = p_valid.sum(-1) == 2
-    # find the 1. valid volume, and 2. from get the two points from the valid volume 
+    # find the 1. valid volume, and 2. from get the two points from the valid volume
     p_intervals = p_intersect[v_valid][p_valid[v_valid]]
     p_intervals = p_intervals.reshape(-1, 2, 3)
 
